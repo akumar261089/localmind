@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>LocalMind — Local LLMs in Your Browser</title>
+
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Inter, system-ui, sans-serif;
+            background: #f6f7fb;
+            height: 100vh;
+            display: flex;
+        }
+
+        #sidebar {
+            width: 320px;
+            background: #ffffff;
+            border-right: 1px solid #e5e7eb;
+            padding: 14px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto;
+        }
+
+        h3,
+        h4 {
+            margin: 4px 0;
+            font-size: 14px;
+        }
+
+        select,
+        button,
+        textarea,
+        input {
+            font-size: 13px;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: #ef4444;
+        }
+
+        button.model-btn {
+            background: #eef2ff;
+            color: #1e3a8a;
+        }
+
+        .model-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        small {
+            color: #6b7280;
+            font-size: 12px;
+        }
+
+        #main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 14px;
+            gap: 10px;
+        }
+
+        #status {
+            font-size: 12px;
+            min-height: 16px;
+        }
+
+        #chat {
+            flex: 1;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 12px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .msg {
+            max-width: 75%;
+            padding: 10px;
+            border-radius: 10px;
+            white-space: pre-wrap;
+        }
+
+        .user {
+            align-self: flex-end;
+            background: #dbeafe;
+        }
+
+        .model {
+            align-self: flex-start;
+            background: #ecfeff;
+            font-family: ui-monospace, monospace;
+        }
+
+        #inputBar {
+            display: flex;
+            gap: 8px;
+        }
+
+        #inputBar input {
+            flex: 1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <aside id="sidebar">
+
+        <h3>🔥 Quick Models</h3>
+        <div id="quickModelsView" class="model-grid"></div>
+
+        <button id="editQuickModelsBtn" class="model-btn">Edit Quick Models</button>
+
+        <div id="quickModelsEditor" style="display:none;">
+            <textarea id="quickModelsInput" rows="4"></textarea>
+            <button id="saveQuickModelsBtn">Save</button>
+        </div>
+
+        <h4>All Models</h4>
+        <select id="modelSelect"></select>
+        <button id="loadModelBtn">Load Selected Model</button>
+
+        <hr>
+
+        <h4>🧠 System Prompt</h4>
+        <select id="systemPreset">
+            <option value="assistant">Helpful Assistant</option>
+            <option value="coder">Code Expert</option>
+            <option value="teacher">Tutor</option>
+            <option value="agent">Autonomous Agent</option>
+        </select>
+
+        <textarea id="systemPrompt" rows="5"></textarea>
+
+        <hr>
+
+        <h4>⚙️ Model Parameters</h4>
+
+        <div class="slider-group">
+            <label>Temperature: <span id="tempVal">0.7</span></label>
+            <input type="range" id="temperature" min="0" max="1" step="0.05" value="0.7">
+        </div>
+
+        <div class="slider-group">
+            <label>Top-P: <span id="topPVal">0.9</span></label>
+            <input type="range" id="topP" min="0.1" max="1" step="0.05" value="0.9">
+        </div>
+
+        <div class="slider-group">
+            <label>Max Tokens</label>
+            <input type="number" id="maxTokens" value="512" min="64" max="4096">
+        </div>
+
+        <button id="clearChatBtn" class="secondary">Clear Chat</button>
+
+    </aside>
+
+    <main id="main">
+        <!-- App Header -->
+        <div style="
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        ">
+            <h2 style="margin: 0; font-size: 18px;">🧠 LocalMind</h2>
+            <small style="color:#6b7280;">Local LLMs · WebGPU · Streaming</small>
+        </div>
+
+        <div id="status"></div>
+        <div id="chat"></div>
+
+        <div id="inputBar">
+            <input id="userInput" placeholder="Type message…" disabled />
+            <button id="sendBtn" disabled>Send</button>
+        </div>
+    </main>
+
+    <script type="module" src="main.js"></script>
+</body>
+
+</html>
