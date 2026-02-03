@@ -29,6 +29,15 @@ el("topPVal").textContent = topPEl.value;
 ========================= */
 const systemPromptEl = el("systemPrompt");
 const systemPresetEl = el("systemPreset");
+const tokenStatusEl = el("tokenStatus");
+
+function estimateTokens(text) {
+  return Math.ceil(text.length / 4);
+}
+
+function updateTokenStatus(promptTokens, responseTokens) {
+  tokenStatusEl.textContent = `Tokens: Prompt ~${promptTokens} | Response ~${responseTokens} | Total ~${promptTokens + responseTokens}`;
+}
 
 const SYSTEM_PRESETS = {
   assistant: "You are a helpful, concise assistant.",
@@ -198,12 +207,17 @@ async function sendMessage() {
   addMessage("user", text);
   messages.push({ role: "user", content: text });
 
+  // 🔒 Freeze prompt once
+  const promptMessages = buildMessagesForModel();
+  const promptText = promptMessages.map((m) => m.content).join("");
+  const promptTokens = estimateTokens(promptText);
+
   const assistantDiv = addMessage("model", "");
   let assistantText = "";
 
   try {
     const stream = await engine.chat.completions.create({
-      messages: buildMessagesForModel(),
+      messages: promptMessages,
       temperature: +temperatureEl.value,
       top_p: +topPEl.value,
       max_tokens: +maxTokensEl.value,
@@ -218,14 +232,20 @@ async function sendMessage() {
       assistantDiv.textContent = assistantText;
       chatEl.scrollTop = chatEl.scrollHeight;
     }
-
-    messages.push({ role: "assistant", content: assistantText });
   } catch (err) {
     assistantDiv.textContent += "\n\n⚠️ Error generating response.";
-  } finally {
-    streaming = false;
-    enableChat(true);
   }
+
+  // ✅ FINALIZE (this always runs)
+  messages.push({ role: "assistant", content: assistantText });
+
+  const finalAssistantText = assistantDiv.textContent || "";
+  const responseTokens = estimateTokens(finalAssistantText);
+
+  updateTokenStatus(promptTokens, responseTokens);
+
+  streaming = false;
+  enableChat(true);
 }
 
 /* =========================
