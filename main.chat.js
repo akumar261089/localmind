@@ -2,8 +2,7 @@ import {
   MLCEngine,
   prebuiltAppConfig,
 } from "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm";
-
-const el = (id) => document.getElementById(id);
+alert("🔥 main.chat.js LOADED 🔥");
 
 /* ---------------- State ---------------- */
 let engine = null;
@@ -11,6 +10,21 @@ let messages = [];
 let modelLoaded = false;
 let isGenerating = false;
 let abortController = null;
+/* ---------------- Debug ---------------- */
+const DEBUG_LLM = true;
+
+// function dbg(label, data) {
+//   if (!DEBUG_LLM) return;
+//   console.groupCollapsed(`🧠 LLM DEBUG → ${label}`);
+//   console.log(data);
+//   console.trace("Call stack"); // optional but VERY useful
+//   console.groupEnd();
+// }
+function dbg(label, data) {
+  if (!DEBUG_LLM) return;
+  console.warn("🔥 LLM DEBUG:", label, data);
+}
+const el = (id) => document.getElementById(id);
 
 /* ---------------- Constants ---------------- */
 const QUICK_MODELS_KEY = "localmind_quick_models";
@@ -27,21 +41,21 @@ function enableChat(enabled) {
 
   // Also disable stop button if chat is enabled (meaning not generating)
   const stopBtn = el("stopBtn");
-  if (stopBtn) stopBtn.style.display = 'none';
+  if (stopBtn) stopBtn.style.display = "none";
 }
 
 function toggleStopButton(show) {
-  el("stopBtn").style.display = show ? 'inline-block' : 'none';
+  el("stopBtn").style.display = show ? "inline-block" : "none";
   el("sendBtn").disabled = show;
 }
 
 function renderMessageContent(div, text) {
   // Use marked to parse markdown
-  if (typeof marked !== 'undefined') {
+  if (typeof marked !== "undefined") {
     div.innerHTML = marked.parse(text);
     // Apply syntax highlighting
-    if (typeof hljs !== 'undefined') {
-      div.querySelectorAll('pre code').forEach((block) => {
+    if (typeof hljs !== "undefined") {
+      div.querySelectorAll("pre code").forEach((block) => {
         hljs.highlightElement(block);
       });
     }
@@ -105,7 +119,7 @@ function populateModels() {
 
 /* ---------------- Quick Models ---------------- */
 let quickModels = JSON.parse(localStorage.getItem(QUICK_MODELS_KEY)) || [
-  "Phi-3-mini-4k-instruct-q4f16_1",
+  "SmolLM2-135M-Instruct-q0f32-MLC",
   "TinyLlama-1.1B-Chat-v1.0-q4f16_1",
 ];
 
@@ -172,11 +186,15 @@ async function sendMessage() {
   if (!text) return;
 
   el("userInput").value = "";
-  el("userInput").style.height = 'auto'; // Reset height
+  el("userInput").style.height = "auto"; // Reset height
 
   addMessage("user", text);
   messages.push({ role: "user", content: text });
 
+  dbg("User Message Added", {
+    latestMessage: text,
+    fullMessages: structuredClone(messages),
+  });
   isGenerating = true;
   toggleStopButton(true);
 
@@ -189,13 +207,17 @@ async function sendMessage() {
   let reply = "";
 
   try {
-    const res = await engine.chat.completions.create({
-      messages,
+    const llmPayload = {
+      messages: structuredClone(messages),
       temperature: +el("temperature").value,
       top_p: +el("topP").value,
       max_tokens: +el("maxTokens").value,
       stream: true,
-    });
+    };
+
+    dbg("LLM Request Payload", llmPayload);
+
+    const res = await engine.chat.completions.create(llmPayload);
 
     for await (const chunk of res) {
       // Check if we pushed stop
@@ -217,7 +239,8 @@ async function sendMessage() {
       scrollToBottom();
 
       // Update stats (Est. or Real)
-      const speed = (await engine.runtimeStatsText()).match(/([0-9.]+) tok\/s/)?.[1] || "?";
+      const speed =
+        (await engine.runtimeStatsText()).match(/([0-9.]+) tok\/s/)?.[1] || "?";
 
       let used = 0;
       let capacity = 4096; // Default assumption
@@ -227,7 +250,10 @@ async function sendMessage() {
       } else {
         // Estimate if no usage data yet: words * 1.3 or chars / 4
         const replyTokens = Math.ceil(reply.length / 3.5);
-        const promptTokens = messages.reduce((acc, m) => acc + (m.content?.length || 0) / 3.5, 0);
+        const promptTokens = messages.reduce(
+          (acc, m) => acc + (m.content?.length || 0) / 3.5,
+          0,
+        );
         used = Math.floor(promptTokens + replyTokens);
       }
 
@@ -270,11 +296,10 @@ el("userInput").onkeydown = (e) => {
   }
   // Auto-expand
   setTimeout(() => {
-    e.target.style.height = 'auto';
-    e.target.style.height = e.target.scrollHeight + 'px';
+    e.target.style.height = "auto";
+    e.target.style.height = e.target.scrollHeight + "px";
   }, 0);
 };
-
 
 el("stopBtn").onclick = async () => {
   if (isGenerating) {
@@ -304,14 +329,12 @@ populateModels();
 renderQuickModels();
 enableChat(false);
 // Setup Marked options if needed
-if (typeof marked !== 'undefined') {
+if (typeof marked !== "undefined") {
   // Optional: marked.setOptions({ ... });
 }
 
 /* ---------------- Theme Logic ---------------- */
 const THEME_KEY = "localmind_theme";
-
-
 
 const THEMES = ["dark", "light", "ocean", "forest", "sunset", "matrix"];
 
