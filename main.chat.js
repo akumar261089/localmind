@@ -2,65 +2,62 @@ import {
   MLCEngine,
   prebuiltAppConfig,
 } from "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm";
-alert("🔥 main.chat.js LOADED 🔥");
 
 /* ---------------- State ---------------- */
 let engine = null;
 let messages = [];
 let modelLoaded = false;
 let isGenerating = false;
-let abortController = null;
+let currentModelId = null;
+let currentModelContextSize = 4096;
+let renderTimer = null;
+let pendingContent = "";
+
 /* ---------------- Debug ---------------- */
 const DEBUG_LLM = true;
 
-// function dbg(label, data) {
-//   if (!DEBUG_LLM) return;
-//   console.groupCollapsed(`🧠 LLM DEBUG → ${label}`);
-//   console.log(data);
-//   console.trace("Call stack"); // optional but VERY useful
-//   console.groupEnd();
-// }
 function dbg(label, data) {
   if (!DEBUG_LLM) return;
   console.warn("🔥 LLM DEBUG:", label, data);
 }
+
 const el = (id) => document.getElementById(id);
 
 /* ---------------- Constants ---------------- */
 const QUICK_MODELS_KEY = "localmind_quick_models";
 
 /* ---------------- UI Helpers ---------------- */
-function setStatus(text) {
+function setStatus(text, showSpinner = false) {
   const s = el("status");
-  if (s) s.textContent = text;
+  if (s) {
+    if (showSpinner) {
+      s.innerHTML = `<span class="loading-spinner"></span> ${text}`;
+    } else {
+      s.textContent = text;
+    }
+  }
 }
 
 function enableChat(enabled) {
   el("userInput").disabled = !enabled;
   el("sendBtn").disabled = !enabled;
-
-  // Also disable stop button if chat is enabled (meaning not generating)
-  const stopBtn = el("stopBtn");
-  if (stopBtn) stopBtn.style.display = "none";
 }
 
 function toggleStopButton(show) {
-  el("stopBtn").style.display = show ? "inline-block" : "none";
+  el("stopBtn").style.display = show ? "inline-flex" : "none";
   el("sendBtn").disabled = show;
 }
 
 function renderMessageContent(div, text) {
-  // Use marked to parse markdown
   if (typeof marked !== "undefined") {
     div.innerHTML = marked.parse(text);
-    // Apply syntax highlighting
     if (typeof hljs !== "undefined") {
       div.querySelectorAll("pre code").forEach((block) => {
         hljs.highlightElement(block);
       });
     }
   } else {
-    div.textContent = text; // Fallback
+    div.textContent = text;
   }
 }
 
@@ -68,7 +65,6 @@ function addMessage(role, text = "") {
   const div = document.createElement("div");
   div.className = `msg ${role}`;
   renderMessageContent(div, text);
-
   el("chat").appendChild(div);
   scrollToBottom();
   return div;
@@ -89,33 +85,119 @@ function resetChat() {
   ];
 }
 
-/* ---------------- Models ---------------- */
-/* ---------------- Models ---------------- */
-/* ---------------- Models ---------------- */
+/* ---------------- Model List with Search & Grouping ---------------- */
+let allModels = [];
+let filteredModels = [];
+
+function extractModelSize(modelId) {
+  // Extract size like "135M", "1.1B", "3B", "7B"
+  const match = modelId.match(/(\d+\.?\d*)(M|B)/i);
+  if (!match) return { value: 0, unit: "", display: "" };
+
+  const value = parseFloat(match[1]);
+  const unit = match[2].toUpperCase();
+  const numValue = unit === "B" ? value * 1000 : value;
+
+  return {
+    value: numValue,
+    unit: unit,
+    display: `${match[1]}${unit}`,
+  };
+}
+
+function extractContextSize(model) {
+  let ctx = 4096; // Default
+
+  if (model.overrides && model.overrides.context_window_size) {
+    ctx = model.overrides.context_window_size;
+  } else if (model.model_id.includes("128k")) {
+    ctx = 128000;
+  } else if (model.model_id.toLowerCase().includes("llama-3")) {
+    ctx = 8192;
+  }
+
+  // Format to k
+  return ctx >= 1000 ? Math.round(ctx / 1024) + "k" : ctx;
+}
+
+function categorizeModel(size) {
+  if (size.value === 0) return "Unknown";
+  if (size.value < 500) return "Tiny"; // < 500M
+  if (size.value < 2000) return "Small"; // 500M - 2B
+  if (size.value < 8000) return "Medium"; // 2B - 8B
+  return "Large"; // 8B+
+}
+
 function populateModels() {
   const modelSelect = el("modelSelect");
   if (!modelSelect) return;
 
-  modelSelect.innerHTML = ""; // Clear existing
+  allModels = prebuiltAppConfig.model_list.map((m) => {
+    const size = extractModelSize(m.model_id);
+    const ctx = extractContextSize(m);
+    const category = categorizeModel(size);
 
-  prebuiltAppConfig.model_list.forEach((m) => {
-    const opt = document.createElement("option");
-    opt.value = m.model_id;
+    return {
+      id: m.model_id,
+      size: size,
+      ctx: ctx,
+      category: category,
+      displayName: m.model_id.replace(/-q\w+$/, ""), // Remove quantization suffix
+      searchText: m.model_id.toLowerCase(),
+    };
+  });
 
-    // Attempt to find context size
-    let ctx = "4k"; // Default assumption for WebLLM WASM
-    if (m.overrides && m.overrides.context_window_size) {
-      ctx = Math.round(m.overrides.context_window_size / 1024) + "k";
-    } else if (m.model_id.includes("128k")) {
-      ctx = "128k";
-    } else if (m.model_id.toLowerCase().includes("llama-3")) {
-      ctx = "8k"; // Llama-3 usually compiled with 8k in newer MLC
+  // Sort by size (smallest first)
+  allModels.sort((a, b) => a.size.value - b.size.value);
+
+  filteredModels = [...allModels];
+  renderModelList();
+}
+
+function renderModelList() {
+  const modelSelect = el("modelSelect");
+  modelSelect.innerHTML = "";
+
+  let currentCategory = null;
+
+  filteredModels.forEach((model) => {
+    // Add category header if changed
+    if (model.category !== currentCategory) {
+      const categoryOpt = document.createElement("option");
+      categoryOpt.disabled = true;
+      categoryOpt.textContent = `── ${model.category} ──`;
+      categoryOpt.style.fontWeight = "bold";
+      categoryOpt.style.color = "var(--text-muted)";
+      modelSelect.appendChild(categoryOpt);
+      currentCategory = model.category;
     }
 
-    opt.textContent = `[${ctx}] ${m.model_id}`;
+    const opt = document.createElement("option");
+    opt.value = model.id;
+    opt.textContent = `[${model.ctx}] ${model.displayName}`;
     modelSelect.appendChild(opt);
   });
+
+  if (filteredModels.length === 0) {
+    const opt = document.createElement("option");
+    opt.disabled = true;
+    opt.textContent = "No models found";
+    modelSelect.appendChild(opt);
+  }
 }
+
+// Model Search Functionality
+el("modelSearch").oninput = (e) => {
+  const query = e.target.value.toLowerCase().trim();
+
+  if (!query) {
+    filteredModels = [...allModels];
+  } else {
+    filteredModels = allModels.filter((m) => m.searchText.includes(query));
+  }
+
+  renderModelList();
+};
 
 /* ---------------- Quick Models ---------------- */
 let quickModels = JSON.parse(localStorage.getItem(QUICK_MODELS_KEY)) || [
@@ -129,7 +211,8 @@ function renderQuickModels() {
 
   quickModels.forEach((id) => {
     const btn = document.createElement("button");
-    btn.textContent = id.replace("-q4f16_1", "");
+    btn.textContent = id.replace(/-q\w+$/, "").substring(0, 25);
+    btn.title = id;
     btn.onclick = () => loadModel(id);
     container.appendChild(btn);
   });
@@ -147,36 +230,116 @@ el("saveQuickModelsBtn").onclick = () => {
     .filter(Boolean);
 
   localStorage.setItem(QUICK_MODELS_KEY, JSON.stringify(quickModels));
-
   el("quickModelsEditor").style.display = "none";
   renderQuickModels();
 };
 
+/* ---------------- Sidebar Toggle (Desktop & Mobile) ---------------- */
+function setupSidebar() {
+  const sidebar = el("sidebar");
+  const overlay = el("sidebarOverlay");
+  const hamburger = el("hamburgerBtn");
+
+  function toggleSidebar() {
+    const isCollapsed = sidebar.classList.contains("collapsed");
+
+    if (isCollapsed) {
+      sidebar.classList.remove("collapsed");
+      overlay.classList.add("active");
+    } else {
+      sidebar.classList.add("collapsed");
+      overlay.classList.remove("active");
+    }
+  }
+
+  function closeSidebar() {
+    sidebar.classList.add("collapsed");
+    overlay.classList.remove("active");
+  }
+
+  if (hamburger) {
+    hamburger.onclick = toggleSidebar;
+  }
+
+  if (overlay) {
+    overlay.onclick = closeSidebar;
+  }
+
+  // Start with sidebar open on desktop, closed on mobile
+  if (window.innerWidth <= 768) {
+    closeSidebar();
+  } else {
+    sidebar.classList.remove("collapsed");
+  }
+}
+
 /* ---------------- Load Model ---------------- */
 async function loadModel(modelId) {
-  // Disconnect existing if any
   if (engine) {
     await engine.unload();
   }
 
-  setStatus("Loading model...");
+  setStatus("Loading model...", true);
   engine ??= new MLCEngine();
 
   engine.setInitProgressCallback((report) => {
-    setStatus(report.text);
+    setStatus(report.text, true);
   });
 
   await engine.reload(modelId);
 
+  // Store current model info
+  currentModelId = modelId;
+  const modelInfo = allModels.find((m) => m.id === modelId);
+  if (modelInfo) {
+    currentModelContextSize = parseInt(modelInfo.ctx) * 1024 || 4096;
+  }
+
   modelLoaded = true;
   resetChat();
   enableChat(true);
-  setStatus(`Model loaded: ${modelId}`);
+  setStatus(`✓ Loaded: ${modelId.replace(/-q\w+$/, "")}`);
+
+  // Auto-focus input
+  el("userInput").focus();
+
+  // Close sidebar on mobile after loading
+  if (window.innerWidth <= 768) {
+    el("sidebar").classList.add("collapsed");
+    el("sidebarOverlay").classList.remove("active");
+  }
 }
 
 el("loadModelBtn").onclick = () => {
-  loadModel(el("modelSelect").value);
+  const selected = el("modelSelect").value;
+  if (selected) {
+    loadModel(selected);
+  }
 };
+
+/* ---------------- Optimized Rendering ---------------- */
+let lastRenderTime = 0;
+const RENDER_THROTTLE = 150; // ms
+
+function scheduleRender(div, content) {
+  pendingContent = content;
+
+  const now = Date.now();
+  if (now - lastRenderTime >= RENDER_THROTTLE) {
+    renderMessageContent(div, content);
+    lastRenderTime = now;
+    pendingContent = "";
+  } else if (!renderTimer) {
+    renderTimer = setTimeout(() => {
+      if (pendingContent) {
+        renderMessageContent(div, pendingContent);
+        lastRenderTime = Date.now();
+        pendingContent = "";
+      }
+      renderTimer = null;
+    }, RENDER_THROTTLE);
+  }
+}
 
 /* ---------------- Chat ---------------- */
 async function sendMessage() {
@@ -186,7 +349,7 @@ async function sendMessage() {
   if (!text) return;
 
   el("userInput").value = "";
-  el("userInput").style.height = "auto"; // Reset height
+  el("userInput").style.height = "auto";
 
   addMessage("user", text);
   messages.push({ role: "user", content: text });
@@ -195,16 +358,18 @@ async function sendMessage() {
     latestMessage: text,
     fullMessages: structuredClone(messages),
   });
+
   isGenerating = true;
   toggleStopButton(true);
 
   const assistantDiv = document.createElement("div");
   assistantDiv.className = "msg model";
-  assistantDiv.textContent = "Thinking...";
+  assistantDiv.textContent = "●●●"; // Thinking indicator
   el("chat").appendChild(assistantDiv);
   scrollToBottom();
 
   let reply = "";
+  let chunkCount = 0;
 
   try {
     const llmPayload = {
@@ -220,48 +385,44 @@ async function sendMessage() {
     const res = await engine.chat.completions.create(llmPayload);
 
     for await (const chunk of res) {
-      // Check if we pushed stop
-      if (!isGenerating) {
-        // engine interrupt logic would go here if supported by this version of WebLLM API exposed to us
-        // but usually break loop is enough to stop processing stream
-        break;
-      }
+      if (!isGenerating) break;
 
       const delta = chunk.choices?.[0]?.delta?.content || "";
       reply += delta;
+      chunkCount++;
 
-      // Re-render with markdown on every chunk or every few chunks
-      // For performance, maybe just textContent during stream, then marked at end?
-      // But let's try live marked rendering, it might be flickering.
-      // Better: update innerHTML but minimal flicker?
-      // Simple approach: usage of marked on incomplete text works okay usually.
-      renderMessageContent(assistantDiv, reply);
-      scrollToBottom();
+      // Optimized rendering: throttled updates
+      scheduleRender(assistantDiv, reply);
 
-      // Update stats (Est. or Real)
+      // Scroll occasionally
+      if (chunkCount % 5 === 0) {
+        scrollToBottom();
+      }
+
+      // Update stats
       const speed =
         (await engine.runtimeStatsText()).match(/([0-9.]+) tok\/s/)?.[1] || "?";
 
       let used = 0;
-      let capacity = 4096; // Default assumption
-
       if (chunk.usage) {
         used = chunk.usage.total_tokens;
       } else {
-        // Estimate if no usage data yet: words * 1.3 or chars / 4
-        const replyTokens = Math.ceil(reply.length / 3.5);
+        // Improved estimation
+        const estimatedTokens = reply.length / 3.5;
         const promptTokens = messages.reduce(
           (acc, m) => acc + (m.content?.length || 0) / 3.5,
           0,
         );
-        used = Math.floor(promptTokens + replyTokens);
+        used = Math.floor(promptTokens + estimatedTokens);
       }
 
-      const pct = Math.min(100, (used / capacity) * 100).toFixed(1);
+      const pct = Math.min(100, (used / currentModelContextSize) * 100).toFixed(
+        1,
+      );
 
       el("tokenStatus").innerHTML = `
         <div style="display:flex; align-items:center; gap:8px; width:100%;">
-            <small style="white-space:nowrap;">Used: <b>${used}</b> / ${capacity}</small>
+            <small style="white-space:nowrap;">Used: <b>${used}</b> / ${currentModelContextSize}</small>
             <div style="flex:1; height:6px; background:var(--bg-app); border-radius:3px; overflow:hidden;">
                 <div style="width:${pct}%; height:100%; background:var(--accent-primary); transition:width 0.2s;"></div>
             </div>
@@ -269,22 +430,25 @@ async function sendMessage() {
         </div>
       `;
     }
+
+    // Final render
+    if (pendingContent) {
+      renderMessageContent(assistantDiv, reply);
+    }
   } catch (err) {
     console.error(err);
-    assistantDiv.textContent += "\n[Error or Stopped]";
+    assistantDiv.innerHTML += "<br><i>[Error or Stopped]</i>";
   }
 
-  if (isGenerating) {
-    // Only push to history if we finished naturally (not stopped manually effectively?)
-    // Actually we should push partial too.
-    messages.push({ role: "assistant", content: reply });
-  } else {
-    messages.push({ role: "assistant", content: reply }); // Save what we got
-  }
+  messages.push({ role: "assistant", content: reply });
 
   isGenerating = false;
   toggleStopButton(false);
   enableChat(true);
+
+  // Auto-focus input for next message
+  el("userInput").focus();
+  scrollToBottom();
 }
 
 el("sendBtn").onclick = sendMessage;
@@ -297,14 +461,18 @@ el("userInput").onkeydown = (e) => {
   // Auto-expand
   setTimeout(() => {
     e.target.style.height = "auto";
-    e.target.style.height = e.target.scrollHeight + "px";
+    e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
   }, 0);
 };
 
 el("stopBtn").onclick = async () => {
   if (isGenerating) {
     isGenerating = false;
-    await engine.interruptGenerate(); // Attempt to stop engine
+    try {
+      await engine.interruptGenerate();
+    } catch (err) {
+      console.warn("Could not interrupt:", err);
+    }
     toggleStopButton(false);
     enableChat(true);
     setStatus("Generation stopped.");
@@ -324,18 +492,8 @@ el("clearChatBtn").onclick = () => {
   setStatus("Chat reset.");
 };
 
-/* ---------------- Init ---------------- */
-populateModels();
-renderQuickModels();
-enableChat(false);
-// Setup Marked options if needed
-if (typeof marked !== "undefined") {
-  // Optional: marked.setOptions({ ... });
-}
-
 /* ---------------- Theme Logic ---------------- */
 const THEME_KEY = "localmind_theme";
-
 const THEMES = ["dark", "light", "ocean", "forest", "sunset", "matrix"];
 
 function applyTheme(theme) {
@@ -350,41 +508,70 @@ function toggleTheme() {
   applyTheme(next);
 }
 
-// Init Theme
 applyTheme(localStorage.getItem(THEME_KEY) || "dark");
 
-const themeBtn = document.getElementById("themeToggleBtn");
+const themeBtn = el("themeToggleBtn");
 if (themeBtn) {
   themeBtn.onclick = toggleTheme;
 }
 
-/* ---------------- Sidebar Logic ---------------- */
-const SIDEBAR_KEY = "localmind_sidebar_collapsed";
-const sidebar = document.getElementById("sidebar");
-const expandBtn = document.getElementById("expandSidebarBtn");
-const collapseBtn = document.getElementById("collapseSidebarBtn");
-
-function setSidebarState(collapsed) {
-  if (!sidebar) return;
-
-  if (collapsed) {
-    sidebar.classList.add("collapsed");
-    if (expandBtn) expandBtn.style.display = "block";
-  } else {
-    sidebar.classList.remove("collapsed");
-    if (expandBtn) expandBtn.style.display = "none";
+/* ---------------- Keyboard Shortcuts ---------------- */
+document.addEventListener("keydown", (e) => {
+  // Ctrl/Cmd + K: Focus input
+  if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+    e.preventDefault();
+    el("userInput").focus();
   }
-  localStorage.setItem(SIDEBAR_KEY, collapsed);
+
+  // Escape: Stop generation or close sidebar
+  if (e.key === "Escape") {
+    if (isGenerating) {
+      el("stopBtn").click();
+    } else if (
+      window.innerWidth <= 768 &&
+      !el("sidebar").classList.contains("collapsed")
+    ) {
+      el("sidebar").classList.add("collapsed");
+      el("sidebarOverlay").classList.remove("active");
+    }
+  }
+});
+
+/* ---------------- Init ---------------- */
+populateModels();
+renderQuickModels();
+setupSidebar();
+enableChat(false);
+
+if (typeof marked !== "undefined") {
+  marked.setOptions({
+    breaks: true,
+    gfm: true,
+  });
 }
 
-// Init Sidebar
-const isCollapsed = localStorage.getItem(SIDEBAR_KEY) === "true";
-setSidebarState(isCollapsed);
+// Handle window resize
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const sidebar = el("sidebar");
+    const overlay = el("sidebarOverlay");
 
-if (collapseBtn) {
-  collapseBtn.onclick = () => setSidebarState(true);
-}
+    if (window.innerWidth > 768) {
+      // Desktop: keep sidebar open
+      sidebar.classList.remove("collapsed");
+      overlay.classList.remove("active");
+    } else {
+      // Mobile: keep current state but remove overlay if open
+      if (!sidebar.classList.contains("collapsed")) {
+        overlay.classList.add("active");
+      }
+    }
+  }, 250);
+});
 
-if (expandBtn) {
-  expandBtn.onclick = () => setSidebarState(false);
-}
+dbg("LocalMind Chat Initialized", {
+  modelsAvailable: allModels.length,
+  currentTheme: localStorage.getItem(THEME_KEY) || "dark",
+});
