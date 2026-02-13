@@ -3,207 +3,258 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LocalMind - Private AI on Your Device</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocalMind Chat</title>
     <link rel="stylesheet" href="css/localmind.css">
-    <style>
-        /* Landing Page Specific Overrides */
-        body {
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
 
-        #hero {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 40px 20px;
-            /* background: transparent; - inherited from body grid */
-        }
-
-        .logo {
-            font-size: 4rem;
-            margin-bottom: 16px;
-            display: inline-block;
-            background: linear-gradient(135deg, var(--accent-primary) 0%, #a855f7 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-weight: 800;
-            font-family: var(--font-mono);
-            letter-spacing: -0.05em;
-            filter: drop-shadow(0 0 15px rgba(6, 182, 212, 0.5));
-        }
-
-        .tagline {
-            font-size: 1.25rem;
-            color: var(--text-muted);
-            max-width: 600px;
-            margin-bottom: 40px;
-            line-height: 1.6;
-        }
-
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 24px;
-            max-width: 900px;
-            width: 100%;
-            padding: 0 16px;
-        }
-
-        .card {
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(8px);
-            padding: 32px;
-            border-radius: var(--radius-xl);
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--border-light);
-            transition: all 0.2s ease;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 0 25px rgba(6, 182, 212, 0.15);
-            border-color: var(--accent-primary);
-        }
-
-        .card h2 {
-            font-size: 1.5rem;
-            margin: 16px 0 8px 0;
-            color: var(--text-main);
-        }
-
-        .card p {
-            color: var(--text-muted);
-            margin-bottom: 24px;
-            font-size: 0.95rem;
-        }
-
-        .btn-launch {
-            background: var(--accent-primary);
-            color: white;
-            padding: 12px 24px;
-            border-radius: var(--radius-lg);
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s;
-            width: 100%;
-            text-align: center;
-        }
-
-        .btn-launch:hover {
-            background: var(--accent-hover);
-            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
-        }
-
-        .icon {
-            font-size: 2.5rem;
-            margin-bottom: 8px;
-            text-shadow: 0 0 20px rgba(6, 182, 212, 0.5);
-        }
-
-        footer {
-            padding: 24px;
-            text-align: center;
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            border-top: 1px solid var(--border-light);
-            background: var(--bg-panel);
-        }
-
-        .badge {
-            display: inline-block;
-            background: rgba(6, 182, 212, 0.1);
-            border: 1px solid rgba(6, 182, 212, 0.3);
-            color: var(--accent-primary);
-            padding: 4px 12px;
-            border-radius: 100px;
-            font-family: var(--font-mono);
-            font-size: 0.75rem;
-            font-weight: 700;
-            margin-bottom: 16px;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-        }
-    </style>
+    <!-- Markdown & Syntax Highlighting -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+        // Inline script to prevent flash of wrong theme
+        (function () {
+            const theme = localStorage.getItem("localmind_theme") || "dark";
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
 </head>
 
 <body>
 
     <header>
+        <button id="hamburgerBtn" class="secondary hamburger-btn">☰</button>
         <a href="index.html" style="color:inherit; text-decoration:none; display:flex; align-items:center; gap:8px;">
-            <strong>🧠 LocalMind</strong>
+            <strong>🧠LocalMind</strong>
         </a>
-        <span style="flex:1"></span>
-        <a href="https://github.com/mlc-ai/web-llm" target="_blank" style="font-size:0.9rem">Parsed & Powered by
-            WebLLM</a>
-        <button id="themeToggleBtn" class="secondary" style="margin-left:16px; padding:6px 10px;">🎨</button>
+
+
+        <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
+            <!-- Social Links -->
+            <a href="https://github.com/akumar261089/localmind?tab=readme-ov-file#-localmind" target="_blank"
+                rel="noopener noreferrer" class="social-link" title="GitHub Profile">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                </svg>
+            </a>
+            <a href="https://www.linkedin.com/in/abhinav-kumar-7606a415" target="_blank" rel="noopener noreferrer"
+                class="social-link" title="LinkedIn Profile">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                </svg>
+            </a>
+            <!-- Compare Mode Toggle -->
+            <button id="compareBtn" class="header-icon-btn" title="Compare Mode">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M19 3h-5v2h5v13l-5-6v9h5c1.103 0 2-.897 2-2V5c0-1.103-.897-2-2-2zM7 19h5v-2H7V4l5 6V1H7c-1.103 0-2 .897-2 2v14c0 1.103.897 2 2 2z" />
+                </svg>
+            </button>
+
+            <!-- About Button -->
+            <button id="aboutBtn" class="header-icon-btn" title="About">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+                </svg>
+            </button>
+            <button id="themeToggleBtn" class="header-icon-btn" title="Toggle Theme">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 3a9 9 0 0 0 0 18c7 0 9-6 9-9 0-4.97-4.03-9-9-9zM7 13.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-3c-.83 0-1.5-.67-1.5-1.5S9.17 7.5 10 7.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4 0c-.83 0-1.5-.67-1.5-1.5S13.17 7.5 14 7.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3 3c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                </svg>
+            </button>
+        </div>
     </header>
 
-    <div id="hero">
-        <span class="badge">Local • Private • Fast</span>
-        <div class="logo">LocalMind</div>
-        <p class="tagline">
-            Run advanced large language models directly in your browser. <br>
-            No servers. No data tracking. Pure client-side AI.
-        </p>
+    <!-- Mobile Overlay -->
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
 
-        <div class="cards">
-            <div class="card">
-                <div class="icon">💬</div>
-                <h2>Chat Mode</h2>
-                <p>Conversational AI with editable system prompts and local model switching.</p>
-                <a href="chat.html" class="btn-launch">Launch Chat</a>
+    <div id="layout">
+
+        <aside id="sidebar">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3>Downloaded Models</h3>
             </div>
 
-            <div class="card">
-                <div class="icon">🌐</div>
-                <h2>Browse Mode</h2>
-                <p>AI-assisted web browsing. Analyze pages and ask questions in context.</p>
-                <a href="browse.html" class="btn-launch">Launch Browse</a>
+            <!-- Storage Info -->
+            <div class="storage-info" id="storageInfo">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span>Cache Storage</span>
+                    <span id="storageSize">Calculating...</span>
+                </div>
+                <div class="storage-bar">
+                    <div class="storage-bar-fill" id="storageBarFill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div id="quickModelsView"></div>
+
+            <hr>
+
+            <!-- Model Selection Area -->
+            <div class="model-selection-area">
+                <!-- Wrapper to toggle between single and double selectors -->
+                <div id="modelSelectorsContainer">
+
+                    <!-- Single / Left Model Selector -->
+                    <div class="model-selector-group" id="selectorLeft">
+                        <label class="selector-label" id="labelLeft">Model</label>
+                        <div class="model-search-container">
+                            <input type="text" id="modelSearch" placeholder="🔍 Search models...">
+                            <select id="modelSelect" size="8"></select>
+                        </div>
+                        <button id="loadModelBtn">Load Model</button>
+                    </div>
+
+                    <!-- Right Model Selector (Hidden by default) -->
+                    <div class="model-selector-group hidden" id="selectorRight"
+                        style="margin-top:20px; border-top:1px dashed var(--border-light); padding-top:20px;">
+                        <label class="selector-label">Model B (Right)</label>
+                        <div class="model-search-container">
+                            <input type="text" id="modelSearchRight" placeholder="🔍 Search models...">
+                            <select id="modelSelectRight" size="8"></select>
+                        </div>
+                        <button id="loadModelBtnRight">Load Model B</button>
+                    </div>
+
+                </div>
+            </div>
+
+            <hr>
+
+            <label>Top-P <span id="topPVal">0.9</span></label>
+            <input type="range" id="topP" min="0.1" max="1" step="0.05" value="0.9">
+
+            <label>Temperature <span id="tempVal">0.7</span></label>
+            <input type="range" id="temperature" min="0" max="1" step="0.05" value="0.7">
+
+            <label>Max Tokens</label>
+            <input type="number" id="maxTokens" value="512">
+
+            <button id="clearChatBtn" class="secondary">Reset Chat</button>
+
+        </aside>
+
+        <main id="main">
+            <!-- Global Status (Errors/Downloads) -->
+            <div id="status"></div>
+
+            <!-- Chat Header Area: Split Model Names & Stats -->
+            <div id="chatHeaderContainer" style="display:flex; gap:16px; margin-bottom:0px;">
+                <div class="chat-header-pane" id="chatHeaderLeftPane" style="flex:1;">
+                    <div id="chatHeaderLeft" class="model-status-header">Select a model</div>
+                    <div id="tokenStatus"></div>
+                </div>
+                <div class="chat-header-pane hidden" id="chatHeaderRightPane" style="flex:1;">
+                    <div id="chatHeaderRight" class="model-status-header">Select Model B</div>
+                    <div id="tokenStatusRight"></div>
+                </div>
+            </div>
+
+            <!-- System Prompt Section -->
+            <div id="systemPromptSection" class="system-prompt-section collapsed" style="margin-top:8px;">
+                <div class="system-prompt-header" id="systemPromptHeader">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="collapse-icon">►</span>
+                        <h4 style="margin:0;">System Prompt</h4>
+                        <span class="prompt-preview" id="promptPreview">You are a helpful assistant.</span>
+                    </div>
+                    <button id="editPromptBtn" class="secondary"
+                        style="padding:6px 12px; font-size:0.85rem;">Edit</button>
+                </div>
+                <div class="system-prompt-content" id="systemPromptContent">
+                    <div style="margin-bottom:8px;">
+                        <label style="margin-bottom:4px;">Quick Presets</label>
+                        <select id="promptPresets">
+                            <option value="helpful">Helpful Assistant</option>
+                            <option value="code">Code Expert</option>
+                            <option value="creative">Creative Writer</option>
+                            <option value="concise">Concise Answers</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <textarea id="systemPrompt" rows="4"
+                        placeholder="Enter system prompt...">You are a helpful assistant.</textarea>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                        <small style="color:var(--text-muted);" id="promptCharCount">28 characters</small>
+                        <button id="resetPromptBtn" class="secondary" style="padding:4px 10px; font-size:0.8rem;">Reset
+                            to Default</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Area Wrapper -->
+            <div id="chatContainer" class="chat-container">
+                <!-- Left / Single Chat -->
+                <div id="chat" class="chat-pane"></div>
+
+                <!-- Right Chat (Hidden by default) -->
+                <div id="chatRight" class="chat-pane hidden"></div>
+            </div>
+
+            <div id="inputBar">
+                <textarea id="userInput" rows="1" placeholder="Type message..." disabled></textarea>
+                <div class="input-buttons">
+                    <button id="sendBtn" disabled>Send</button>
+                    <button id="stopBtn" class="secondary" style="display:none;">Stop</button>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-title">ℹ️ About LocalMind</div>
+            <div class="modal-message">
+                <p><strong>LocalMind</strong> is a privacy-first, browser-based AI experimentation platform.</p>
+                <p>It runs modern Large Language Models (LLMs) like TinyLlama, Qwen, and Llama 3 directly inside your
+                    browser using <strong>WebGPU</strong>.</p>
+
+                <h4 style="margin-top:16px;">Key Features:</h4>
+                <ul style="padding-left:20px; margin-top:8px;">
+                    <li>🔒 <strong>100% Local & Private:</strong> No data leaves your device.</li>
+                    <li>🚀 <strong>WebGPU Powered:</strong> Hardware acceleration for fast inference.</li>
+                    <li>⚖️ <strong>Compare Mode:</strong> Run two models side-by-side to compare outputs.</li>
+                    <li>💾 <strong>Smart Caching:</strong> Models are cached locally for instant reloading.</li>
+                </ul>
+
+                <hr style="margin:16px 0; border-color:var(--border-light);">
+
+                <p style="font-size:0.85rem; color:var(--text-muted);">
+                    Powered by <a href="https://webllm.mlc.ai/" target="_blank"
+                        style="color:var(--accent-primary);">WebLLM</a> and <a href="https://github.com/mlc-ai/web-llm"
+                        target="_blank" style="color:var(--accent-primary);">MLC AI</a>.
+                </p>
+                <p style="font-size:0.85rem; color:var(--text-muted);">
+                    Built by <a href="https://github.com/akumar261089" target="_blank"
+                        style="color:var(--accent-primary);">Abhinav Kumar</a>.
+                </p>
+            </div>
+            <div class="modal-buttons">
+                <button id="aboutCloseBtn">Close</button>
             </div>
         </div>
     </div>
 
-    <footer>
-        <p>
-            LocalMind requires a WebGPU-compatible browser (Chrome 113+, Edge, or others).<br>
-            Models are downloaded once and cached locally.
-        </p>
-    </footer>
 
-    <script>
-        /* ---------------- Theme Logic ---------------- */
-        const THEME_KEY = "localmind_theme";
-        const THEMES = ["dark", "light", "ocean", "forest", "sunset", "matrix"];
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title" id="modalTitle">Confirm Action</div>
+            <div class="modal-message" id="modalMessage">Are you sure?</div>
+            <div class="modal-buttons">
+                <button class="secondary" id="modalCancel">Cancel</button>
+                <button id="modalConfirm">Confirm</button>
+            </div>
+        </div>
+    </div>
 
-        function applyTheme(theme) {
-            document.documentElement.setAttribute("data-theme", theme);
-            localStorage.setItem(THEME_KEY, theme);
-        }
-
-        function toggleTheme() {
-            const current = localStorage.getItem(THEME_KEY) || "dark";
-            const idx = THEMES.indexOf(current);
-            const next = THEMES[(idx + 1) % THEMES.length];
-            applyTheme(next);
-        }
-
-        // Init Theme
-        applyTheme(localStorage.getItem(THEME_KEY) || "dark");
-
-        const themeBtn = document.getElementById("themeToggleBtn");
-        if (themeBtn) {
-            themeBtn.onclick = toggleTheme;
-        }
-    </script>
+    <script type="module" src="main.js"></script>
 </body>
 
 </html>

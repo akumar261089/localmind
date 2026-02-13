@@ -253,6 +253,31 @@ header a.nav-link {
   display: block;
 }
 
+/* Header Icon Buttons (mimic social links) */
+.header-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  /* Minimal padding */
+  color: var(--text-muted);
+  transition: color 0.2s, transform 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-icon-btn:hover {
+  color: var(--accent-primary);
+  transform: translateY(-2px);
+  background: transparent;
+  box-shadow: none;
+}
+
+.header-icon-btn:active {
+  transform: translateY(0);
+}
+
 /* Icon Buttons */
 .icon-btn {
   background: transparent;
@@ -340,7 +365,18 @@ hr {
 }
 
 /* ---------- Chat Area ---------- */
-#chat {
+/* ---------- Chat Area ---------- */
+.chat-container {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  min-height: 0;
+  /* Important for nested flex scroll */
+}
+
+.chat-pane {
   flex: 1;
   background: var(--bg-panel);
   border-radius: var(--radius-xl);
@@ -348,9 +384,46 @@ hr {
   overflow-y: auto;
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-light);
-  margin-bottom: 16px;
   scroll-behavior: smooth;
 }
+
+.chat-pane.hidden {
+  display: none !important;
+}
+
+.model-selector-group.hidden {
+  display: none !important;
+}
+
+/* Compare Mode specific adjustments */
+.compare-mode .chat-pane {
+  border-color: var(--accent-primary);
+  /* Optional hint */
+}
+
+/* Model Status Headers inside Chat */
+.model-status-header {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-main);
+  padding-left: 4px;
+  border-left: 3px solid var(--accent-primary);
+  line-height: 1.2;
+}
+
+.chat-header-pane.hidden {
+  display: none !important;
+}
+
+/* Active Button State (for Compare/Toggle) */
+button.active {
+  background: var(--bg-panel);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-glow);
+}
+
 
 .msg {
   max-width: 80%;
@@ -369,6 +442,7 @@ hr {
     opacity: 0;
     transform: translateY(5px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -467,7 +541,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 8px;
-    min-width: 400px;
+  min-width: 400px;
 }
 
 #modelSearch {
@@ -811,11 +885,11 @@ button.secondary:hover:not(:disabled) {
   .prompt-preview {
     max-width: 150px;
   }
-  
+
   .system-prompt-header {
     padding: 10px 12px;
   }
-  
+
   #editPromptBtn {
     padding: 4px 8px;
     font-size: 0.8rem;
@@ -994,7 +1068,8 @@ button.secondary:hover:not(:disabled) {
   #userInput {
     width: 100%;
     min-height: 44px;
-    font-size: 16px; /* Prevents zoom on iOS */
+    font-size: 16px;
+    /* Prevents zoom on iOS */
   }
 
   /* Show icons instead of text on mobile */
@@ -1022,10 +1097,25 @@ button.secondary:hover:not(:disabled) {
       width: 16px;
       height: 16px;
     }
-    
+
     header a.nav-link {
       display: none;
     }
+  }
+
+  /* Compare Mode Mobile Stack */
+  .chat-container {
+    flex-direction: column;
+  }
+
+  #chatHeaderContainer {
+    flex-direction: column;
+    gap: 4px !important;
+  }
+
+  #tokenStatusContainer {
+    flex-direction: column;
+    gap: 4px !important;
   }
 }
 
