@@ -49,19 +49,28 @@
         </div>
     </header>
 
+    <!-- Mobile Overlay -->
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
     <div id="layout">
 
         <aside id="sidebar">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h3>Quick Models</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3>Downloaded Models</h3>
             </div>
-            <div id="quickModelsView"></div>
 
-            <button id="editQuickModelsBtn" class="secondary">Edit Quick Models</button>
-            <div id="quickModelsEditor" style="display:none;">
-                <textarea id="quickModelsInput" rows="4"></textarea>
-                <button id="saveQuickModelsBtn">Save</button>
+            <!-- Storage Info -->
+            <div class="storage-info" id="storageInfo">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span>Cache Storage</span>
+                    <span id="storageSize">Calculating...</span>
+                </div>
+                <div class="storage-bar">
+                    <div class="storage-bar-fill" id="storageBarFill" style="width: 0%"></div>
+                </div>
             </div>
+
+            <div id="quickModelsView"></div>
 
             <hr>
 
@@ -73,10 +82,6 @@
 
             <hr>
 
-            <h4>System Prompt</h4>
-            <textarea id="systemPrompt" rows="4">You are a helpful assistant.</textarea>
-
-            <hr>
             <label>Top-P <span id="topPVal">0.9</span></label>
             <input type="range" id="topP" min="0.1" max="1" step="0.05" value="0.9">
 
@@ -94,6 +99,38 @@
             <div id="status"></div>
             <div id="tokenStatus"></div>
 
+            <!-- System Prompt Section -->
+            <div id="systemPromptSection" class="system-prompt-section collapsed">
+                <div class="system-prompt-header" id="systemPromptHeader">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="collapse-icon">►</span>
+                        <h4 style="margin:0;">System Prompt</h4>
+                        <span class="prompt-preview" id="promptPreview">You are a helpful assistant.</span>
+                    </div>
+                    <button id="editPromptBtn" class="secondary"
+                        style="padding:6px 12px; font-size:0.85rem;">Edit</button>
+                </div>
+                <div class="system-prompt-content" id="systemPromptContent">
+                    <div style="margin-bottom:8px;">
+                        <label style="margin-bottom:4px;">Quick Presets</label>
+                        <select id="promptPresets">
+                            <option value="helpful">Helpful Assistant</option>
+                            <option value="code">Code Expert</option>
+                            <option value="creative">Creative Writer</option>
+                            <option value="concise">Concise Answers</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <textarea id="systemPrompt" rows="4"
+                        placeholder="Enter system prompt...">You are a helpful assistant.</textarea>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                        <small style="color:var(--text-muted);" id="promptCharCount">28 characters</small>
+                        <button id="resetPromptBtn" class="secondary" style="padding:4px 10px; font-size:0.8rem;">Reset
+                            to Default</button>
+                    </div>
+                </div>
+            </div>
+
             <div id="chat"></div>
 
             <div id="inputBar">
@@ -105,6 +142,18 @@
             </div>
         </main>
 
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title" id="modalTitle">Confirm Action</div>
+            <div class="modal-message" id="modalMessage">Are you sure?</div>
+            <div class="modal-buttons">
+                <button class="secondary" id="modalCancel">Cancel</button>
+                <button id="modalConfirm">Confirm</button>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="main.chat.js"></script>
