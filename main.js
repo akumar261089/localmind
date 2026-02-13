@@ -4,12 +4,27 @@ import {
 } from "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm";
 
 /* ---------------- State ---------------- */
-let engine = null;
-let messages = [];
-let modelLoaded = false;
-let isGenerating = false;
-let currentModelId = null;
-let currentModelContextSize = 4096;
+/* ---------------- State ---------------- */
+const engines = {
+  left: {
+    instance: null,
+    modelId: null,
+    loaded: false,
+    messages: [],
+    generating: false,
+    contextSize: 4096,
+  },
+  right: {
+    instance: null,
+    modelId: null,
+    loaded: false,
+    messages: [],
+    generating: false,
+    contextSize: 4096,
+  },
+};
+
+let compareMode = false;
 let renderTimer = null;
 let pendingContent = "";
 let cachedModels = new Set();
@@ -149,10 +164,15 @@ function setupSystemPrompt() {
     updatePreview();
     updateCharCount();
 
-    // Update messages if chat has started
-    if (messages.length > 0 && messages[0].role === "system") {
-      messages[0].content = text;
-    }
+    // Update messages if chat has started - for both engines
+    ["left", "right"].forEach((slot) => {
+      if (
+        engines[slot].messages.length > 0 &&
+        engines[slot].messages[0].role === "system"
+      ) {
+        engines[slot].messages[0].content = text;
+      }
+    });
   }
 
   function updatePreview() {
@@ -216,6 +236,7 @@ function showModal(title, message) {
 
 /* ---------------- UI Helpers ---------------- */
 function setStatus(text, showSpinner = false) {
+  // Global status for generic messages
   const s = el("status");
   if (s) {
     if (showSpinner) {
@@ -223,6 +244,18 @@ function setStatus(text, showSpinner = false) {
     } else {
       s.textContent = text;
     }
+  }
+}
+
+function setSlotStatus(slot, text, showSpinner = false) {
+  const id = slot === "right" ? "chatHeaderRight" : "chatHeaderLeft";
+  const elHeader = el(id);
+  if (!elHeader) return;
+
+  if (showSpinner) {
+    elHeader.innerHTML = `<span class="loading-spinner"></span> ${text}`;
+  } else {
+    elHeader.textContent = text;
   }
 }
 
@@ -261,6 +294,8 @@ function toggleStopButton(show) {
   el("sendBtn").disabled = show;
 }
 
+
+/* ---------------- Chat UI ---------------- */
 function renderMessageContent(div, text) {
   if (typeof marked !== "undefined") {
     div.innerHTML = marked.parse(text);
@@ -274,28 +309,43 @@ function renderMessageContent(div, text) {
   }
 }
 
-function addMessage(role, text = "") {
+// Updated to target specific chat pane
+function addMessage(role, text = "", slot = "left") {
+  const targetId = slot === "right" ? "chatRight" : "chat";
+  const parent = el(targetId);
+  if (!parent) return;
+
   const div = document.createElement("div");
   div.className = `msg ${role}`;
   renderMessageContent(div, text);
-  el("chat").appendChild(div);
-  scrollToBottom();
+  parent.appendChild(div);
+  scrollToBottom(slot);
   return div;
 }
 
-function scrollToBottom() {
-  const chat = el("chat");
-  chat.scrollTop = chat.scrollHeight;
+function scrollToBottom(slot = "left") {
+  const targetId = slot === "right" ? "chatRight" : "chat";
+  const chat = el(targetId);
+  if (chat) {
+    chat.scrollTop = chat.scrollHeight;
+  }
 }
 
 function resetChat() {
   el("chat").innerHTML = "";
-  messages = [
-    {
-      role: "system",
-      content: el("systemPrompt").value,
-    },
+  el("chatRight").innerHTML = "";
+
+  // Reset messages for both
+  engines.left.messages = [
+    { role: "system", content: el("systemPrompt").value },
   ];
+  engines.right.messages = [
+    { role: "system", content: el("systemPrompt").value },
+  ];
+
+  // Clear status logs
+  el("tokenStatus").innerHTML = "";
+  el("tokenStatusRight").innerHTML = "";
 }
 
 /* ---------------- Model List with Search & Grouping ---------------- */
@@ -356,28 +406,36 @@ function isRecommended(modelId) {
   return recommended.some((pattern) => modelId.includes(pattern));
 }
 
+/* ---------------- Model List ---------------- */
+function getAllModelsSorted() {
+  // Sort: Recommended first, then by size, then Other/unknown at end
+  return [...allModels].sort((a, b) => {
+    // Recommended always first
+    if (a.isRecommended && !b.isRecommended) return -1;
+    if (!a.isRecommended && b.isRecommended) return 1;
+
+    // Other category always last
+    if (a.category === "Other" && b.category !== "Other") return 1;
+    if (a.category !== "Other" && b.category === "Other") return -1;
+
+    // Otherwise sort by size
+    return a.size.value - b.size.value;
+  });
+}
+
 function populateModels() {
-  const modelSelect = el("modelSelect");
-  if (!modelSelect) return;
-
-  const recommendedPatterns = getRecommendedModels();
-
   // Group models by family and keep only the best quantization
   const familyMap = new Map();
 
   prebuiltAppConfig.model_list.forEach((m) => {
     const family = getModelFamily(m.model_id);
-
-    // Prefer q4f16 (balanced), then q4f32, then others
     const currentBest = familyMap.get(family);
-
     if (!currentBest) {
       familyMap.set(family, m);
     } else {
-      // Priority: q4f16 > q4f32 > others
       const current = currentBest.model_id;
       const candidate = m.model_id;
-
+      // Priority: q4f16 > q4f32 > others
       if (candidate.includes("q4f16") && !current.includes("q4f16")) {
         familyMap.set(family, m);
       } else if (
@@ -408,31 +466,38 @@ function populateModels() {
     };
   });
 
-  // Sort: Recommended first, then by size, then Other/unknown at end
-  allModels.sort((a, b) => {
-    // Recommended always first
+  filteredModels = getAllModelsSorted();
+  renderModelList("modelSelect");      // Left
+  renderModelList("modelSelectRight"); // Right
+}
+
+function renderModelList(elementId, filterText = "") {
+  const modelSelect = el(elementId);
+  if (!modelSelect) return;
+
+  modelSelect.innerHTML = "";
+
+  // Apply filter if provided (handled by caller typically, but helpful here)
+  let modelsToShow = filteredModels;
+  if (filterText) {
+    modelsToShow = allModels.filter((m) => m.searchText.includes(filterText.toLowerCase()));
+  } else if (filteredModels.length !== allModels.length) {
+    // Use global filtered list if no specific override
+    modelsToShow = filteredModels;
+  }
+
+  // Sort again just to be safe or if filtered
+  modelsToShow = [...modelsToShow].sort((a, b) => {
     if (a.isRecommended && !b.isRecommended) return -1;
     if (!a.isRecommended && b.isRecommended) return 1;
-
-    // Other category always last
     if (a.category === "Other" && b.category !== "Other") return 1;
     if (a.category !== "Other" && b.category === "Other") return -1;
-
-    // Otherwise sort by size
     return a.size.value - b.size.value;
   });
 
-  filteredModels = [...allModels];
-  renderModelList();
-}
-
-function renderModelList() {
-  const modelSelect = el("modelSelect");
-  modelSelect.innerHTML = "";
-
   let currentCategory = null;
 
-  filteredModels.forEach((model) => {
+  modelsToShow.forEach((model) => {
     if (model.category !== currentCategory) {
       const categoryOpt = document.createElement("option");
       categoryOpt.disabled = true;
@@ -462,7 +527,7 @@ function renderModelList() {
     modelSelect.appendChild(opt);
   });
 
-  if (filteredModels.length === 0) {
+  if (modelsToShow.length === 0) {
     const opt = document.createElement("option");
     opt.disabled = true;
     opt.textContent = "No models found";
@@ -540,7 +605,8 @@ async function detectCachedModels() {
 
   await updateCacheInfo();
   renderDownloadedModels();
-  renderModelList();
+  renderModelList("modelSelect");
+  renderModelList("modelSelectRight");
 }
 async function downloadModelInBackground(modelId) {
   if (cachedModels.has(modelId)) {
@@ -570,7 +636,8 @@ async function downloadModelInBackground(modelId) {
 
     await updateCacheInfo();
     renderDownloadedModels();
-    renderModelList();
+    renderModelList("modelSelect");
+    renderModelList("modelSelectRight");
 
     setStatus(`✓ ${modelId} downloaded (ready to switch instantly)`);
 
@@ -596,16 +663,19 @@ This model will be removed from browser storage and must be re-downloaded to use
   try {
     setStatus("Deleting model from cache...", true);
 
-    // 🔹 If this model is currently loaded, unload it first
-    if (engine && currentModelId === modelId) {
-      try {
-        await engine.unload();
-        modelLoaded = false;
-        currentModelId = null;
-        enableChat(false);
-        dbg("Engine unloaded before deletion", modelId);
-      } catch (unloadErr) {
-        console.warn("Could not unload engine:", unloadErr);
+    // 🔹 If this model is currently loaded in ANY slot, unload it first
+    for (const slot of ["left", "right"]) {
+      if (engines[slot].instance && engines[slot].modelId === modelId) {
+        try {
+          await engines[slot].instance.unload();
+          engines[slot].loaded = false;
+          engines[slot].modelId = null;
+          // If left was unloaded, disable chat
+          if (slot === "left") enableChat(false);
+          dbg(`Engine (${slot}) unloaded before deletion`, modelId);
+        } catch (unloadErr) {
+          console.warn(`Could not unload engine (${slot}):`, unloadErr);
+        }
       }
     }
 
@@ -662,7 +732,8 @@ This model will be removed from browser storage and must be re-downloaded to use
 
     await updateCacheInfo();
     renderDownloadedModels();
-    renderModelList();
+    renderModelList("modelSelect");
+    renderModelList("modelSelectRight");
   } catch (err) {
     console.error("Error deleting model:", err);
 
@@ -700,7 +771,7 @@ function renderDownloadedModels() {
     const btn = document.createElement("button");
     btn.textContent = model.displayName.substring(0, 20);
     btn.title = model.id;
-    btn.onclick = () => loadModel(model.id);
+    btn.onclick = () => loadModel(model.id, "left"); // Default to left on quick click
 
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "delete-model-btn";
@@ -764,22 +835,32 @@ function setupSidebar() {
 }
 
 /* ---------------- Load Model ---------------- */
-async function loadModel(modelId) {
-  // Save current chat history before unloading
-  const previousMessages = [...messages];
+async function loadModel(modelId, slot = "left") {
+  const engineState = engines[slot];
 
-  if (engine) {
-    await engine.unload();
+  // Save current chat history before unloading if needed (implementation simplicity: we just reload)
+  const previousMessages = [...engineState.messages];
+
+  if (engineState.instance) {
+    setSlotStatus(slot, `Reloading...`, true);
+  } else {
+    setSlotStatus(slot, `Loading...`, true);
+    engineState.instance = new MLCEngine();
   }
 
-  setStatus("Loading model...", true);
-  engine ??= new MLCEngine();
+  const engine = engineState.instance;
 
   engine.setInitProgressCallback((report) => {
-    setStatus(report.text, true);
+    setSlotStatus(slot, report.text, true);
   });
 
-  await engine.reload(modelId);
+  try {
+    await engine.reload(modelId);
+  } catch (err) {
+    console.error(err);
+    setSlotStatus(slot, `❌ Failed: ${modelId}`);
+    return;
+  }
 
   // Mark as downloaded
   cachedModels.add(modelId);
@@ -787,33 +868,42 @@ async function loadModel(modelId) {
   if (model) model.downloaded = true;
 
   // Store current model info
-  currentModelId = modelId;
+  engineState.modelId = modelId;
+  engineState.loaded = true;
+
   const modelInfo = allModels.find((m) => m.id === modelId);
   if (modelInfo) {
-    currentModelContextSize = parseInt(modelInfo.ctx) * 1024 || 4096;
+    engineState.contextSize = parseInt(modelInfo.ctx) * 1024 || 4096;
   }
 
-  modelLoaded = true;
-
-  // Restore chat history instead of resetting
+  // Restore chat history + system prompt
   if (previousMessages.length > 0) {
-    messages = previousMessages;
-    // Update system prompt if it exists
-    if (messages[0]?.role === "system") {
-      messages[0].content = el("systemPrompt").value;
+    engineState.messages = previousMessages;
+    // Update system prompt if it exists (sync with UI)
+    if (engineState.messages[0]?.role === "system") {
+      engineState.messages[0].content = el("systemPrompt").value;
     }
   } else {
     // Only reset if no previous messages
-    resetChat();
+    engineState.messages = [
+      { role: "system", content: el("systemPrompt").value }
+    ];
   }
 
-  enableChat(true);
-  setStatus(`✓ Loaded: ${modelInfo ? modelInfo.displayName : modelId}`);
+  // If left model loaded, enable chat input
+  if (slot === "left") {
+    enableChat(true);
+  } else if (compareMode && engines.left.loaded) {
+    enableChat(true);
+  }
+
+  setSlotStatus(slot, `${modelInfo ? modelInfo.displayName : modelId}`);
 
   // Update UI
   await updateCacheInfo();
   renderDownloadedModels();
-  renderModelList();
+  renderModelList("modelSelect");
+  renderModelList("modelSelectRight");
 
   // Auto-focus input
   el("userInput").focus();
@@ -825,12 +915,13 @@ async function loadModel(modelId) {
   }
 }
 
+
 el("loadModelBtn").onclick = () => {
   const selected = el("modelSelect").value;
   if (!selected) return;
 
   if (cachedModels.has(selected)) {
-    loadModel(selected); // instant switch
+    loadModel(selected, "left"); // instant switch
   } else {
     downloadModelInBackground(selected);
   }
@@ -847,7 +938,7 @@ async function autoSelectRecommendedModel() {
 
   const hasLoadedBefore = localStorage.getItem("localmind_has_loaded_model");
 
-  if (!hasLoadedBefore && !modelLoaded) {
+  if (!hasLoadedBefore && !engines.left.loaded) {
     // Get all recommended models and find the SMALLEST one for memory efficiency
     const recommendedModels = allModels.filter((m) => m.isRecommended);
 
@@ -865,7 +956,7 @@ async function autoSelectRecommendedModel() {
 
       if (shouldLoad) {
         el("modelSelect").value = smallestModel.id;
-        await loadModel(smallestModel.id);
+        await loadModel(smallestModel.id, "left");
         localStorage.setItem("localmind_has_loaded_model", "true");
       }
     }
@@ -897,8 +988,13 @@ function scheduleRender(div, content) {
 }
 
 /* ---------------- Chat ---------------- */
+/* ---------------- Chat ---------------- */
 async function sendMessage() {
-  if (!modelLoaded || isGenerating) return;
+  const leftLoaded = engines.left.loaded;
+  const rightLoaded = engines.right.loaded;
+
+  if (!leftLoaded && !rightLoaded) return;
+  if (Object.values(engines).some(e => e.generating)) return;
 
   const text = el("userInput").value.trim();
   if (!text) return;
@@ -906,105 +1002,131 @@ async function sendMessage() {
   el("userInput").value = "";
   el("userInput").style.height = "auto";
 
-  addMessage("user", text);
-  messages.push({ role: "user", content: text });
-
-  dbg("User Message Added", {
-    latestMessage: text,
-    fullMessages: structuredClone(messages),
-  });
-
-  isGenerating = true;
-  toggleStopButton(true);
-
-  const assistantDiv = document.createElement("div");
-  assistantDiv.className = "msg model";
-  assistantDiv.textContent = "●●●"; // Thinking indicator
-  el("chat").appendChild(assistantDiv);
-  scrollToBottom();
-
-  let reply = "";
-  let chunkCount = 0;
-
-  try {
-    const llmPayload = {
-      messages: structuredClone(messages),
-      temperature: +el("temperature").value,
-      top_p: +el("topP").value,
-      max_tokens: +el("maxTokens").value,
-      stream: true,
-    };
-
-    dbg("LLM Request Payload", llmPayload);
-
-    const res = await engine.chat.completions.create(llmPayload);
-
-    for await (const chunk of res) {
-      if (!isGenerating) break;
-
-      const delta = chunk.choices?.[0]?.delta?.content || "";
-      reply += delta;
-      chunkCount++;
-
-      // Optimized rendering: throttled updates
-      scheduleRender(assistantDiv, reply);
-
-      // Scroll occasionally
-      if (chunkCount % 5 === 0) {
-        scrollToBottom();
-      }
-
-      // Update stats
-      const speed =
-        (await engine.runtimeStatsText()).match(/([0-9.]+) tok\/s/)?.[1] || "?";
-
-      let used = 0;
-      if (chunk.usage) {
-        used = chunk.usage.total_tokens;
-      } else {
-        // Improved estimation
-        const estimatedTokens = reply.length / 3.5;
-        const promptTokens = messages.reduce(
-          (acc, m) => acc + (m.content?.length || 0) / 3.5,
-          0,
-        );
-        used = Math.floor(promptTokens + estimatedTokens);
-      }
-
-      const pct = Math.min(100, (used / currentModelContextSize) * 100).toFixed(
-        1,
-      );
-
-      el("tokenStatus").innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px; width:100%;">
-            <small style="white-space:nowrap;">Used: <b>${used}</b> / ${currentModelContextSize}</small>
-            <div style="flex:1; height:6px; background:var(--bg-app); border-radius:3px; overflow:hidden;">
-                <div style="width:${pct}%; height:100%; background:var(--accent-primary); transition:width 0.2s;"></div>
-            </div>
-            <small style="white-space:nowrap;">${speed} t/s</small>
-        </div>
-      `;
+  // Add User Message to UI (Shared or individual?)
+  // In compare mode, we add to both columns if they are active
+  if (!compareMode) {
+    addMessage("user", text, "left");
+    engines.left.messages.push({ role: "user", content: text });
+  } else {
+    if (leftLoaded) {
+      addMessage("user", text, "left");
+      engines.left.messages.push({ role: "user", content: text });
     }
-
-    // Final render
-    if (pendingContent) {
-      renderMessageContent(assistantDiv, reply);
+    if (rightLoaded) {
+      addMessage("user", text, "right");
+      engines.right.messages.push({ role: "user", content: text });
     }
-  } catch (err) {
-    console.error(err);
-    assistantDiv.innerHTML += "<br><i>[Error or Stopped]</i>";
   }
 
-  messages.push({ role: "assistant", content: reply });
+  toggleStopButton(true);
 
-  isGenerating = false;
+  // Define a helper to run generation for a single slot
+  const runGeneration = async (slot) => {
+    const engineState = engines[slot];
+    if (!engineState.loaded) return;
+
+    engineState.generating = true;
+
+    const assistantDiv = document.createElement("div");
+    assistantDiv.className = "msg model";
+    assistantDiv.textContent = "●●●";
+
+    const targetId = slot === "right" ? "chatRight" : "chat";
+    el(targetId).appendChild(assistantDiv);
+    scrollToBottom(slot);
+
+    let reply = "";
+    let chunkCount = 0;
+    const startTime = performance.now(); // Track start time
+
+    try {
+      const llmPayload = {
+        messages: structuredClone(engineState.messages),
+        temperature: +el("temperature").value,
+        top_p: +el("topP").value,
+        max_tokens: +el("maxTokens").value,
+        stream: true,
+      };
+
+      dbg(`LLM Request (${slot})`, llmPayload);
+
+      const res = await engineState.instance.chat.completions.create(llmPayload);
+
+      for await (const chunk of res) {
+        if (!engineState.generating) break;
+
+        const delta = chunk.choices?.[0]?.delta?.content || "";
+        reply += delta;
+        chunkCount++;
+
+        if (chunkCount === 1) {
+          assistantDiv.textContent = ""; // Clear loader
+        }
+
+        // Direct render for simplicity with multiple streams (throttling might be tricky with shared var)
+        renderMessageContent(assistantDiv, reply); // We might want to throttle this if performace issues arise
+
+        if (chunkCount % 5 === 0) scrollToBottom(slot);
+
+        // Update stats
+        const speed = (await engineState.instance.runtimeStatsText()).match(/([0-9.]+) tok\/s/)?.[1] || "?";
+
+        // Estimate usage
+        const estimatedTokens = reply.length / 3.5;
+        const promptTokens = engineState.messages.reduce((acc, m) => acc + (m.content?.length || 0) / 3.5, 0);
+        const used = Math.floor(promptTokens + estimatedTokens);
+        const pct = Math.min(100, (used / engineState.contextSize) * 100).toFixed(1);
+
+        const statusId = slot === "right" ? "tokenStatusRight" : "tokenStatus";
+
+        // Update status with duration
+        const duration = ((performance.now() - startTime) / 1000).toFixed(1);
+
+        el(statusId).innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:2px; width:100%; font-size:0.75rem; color:var(--text-muted); padding:4px; background:var(--bg-panel); border-radius:4px; border:1px solid var(--border-light);">
+                <div style="display:flex; justify-content:space-between;">
+                    <span>Speed: <b>${speed} t/s</b></span>
+                    <span>Time: <b>${duration}s</b></span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="flex:1; height:4px; background:var(--bg-app); border-radius:2px; overflow:hidden;">
+                        <div style="width:${pct}%; height:100%; background:var(--accent-primary);"></div>
+                    </div>
+                    <span>${used}/${engineState.contextSize}</span>
+                </div>
+            </div>
+          `;
+      }
+    } catch (err) {
+      console.error(err);
+      assistantDiv.innerHTML += "<br><i>[Error or Stopped]</i>";
+    }
+
+    engineState.messages.push({ role: "assistant", content: reply });
+    engineState.generating = false;
+
+    // Final duration update
+    const endTime = performance.now();
+    const finalDuration = ((endTime - startTime) / 1000).toFixed(2);
+    const statusId = slot === "right" ? "tokenStatusRight" : "tokenStatus";
+    // Keep the simplified view but ensure final time is correct
+    // ... existing innerHTML update is 'live', so it should already be close. 
+    // We can force one last update if needed, but the loop usually covers it.
+  };
+
+  const promises = [];
+  if (engines.left.loaded) promises.push(runGeneration("left"));
+  if (compareMode && engines.right.loaded) promises.push(runGeneration("right"));
+
+  await Promise.all(promises);
+
   toggleStopButton(false);
   enableChat(true);
-
-  // Auto-focus input for next message
   el("userInput").focus();
-  scrollToBottom();
+  scrollToBottom("left");
+  if (compareMode) scrollToBottom("right");
 }
+
 
 el("sendBtn").onclick = sendMessage;
 
@@ -1021,17 +1143,16 @@ el("userInput").onkeydown = (e) => {
 };
 
 el("stopBtn").onclick = async () => {
-  if (isGenerating) {
-    isGenerating = false;
-    try {
-      await engine.interruptGenerate();
-    } catch (err) {
-      console.warn("Could not interrupt:", err);
-    }
-    toggleStopButton(false);
-    enableChat(true);
-    setStatus("Generation stopped.");
-  }
+  // Interrupt both
+  if (engines.left.generating) await engines.left.instance.interruptGenerate();
+  if (engines.right.generating) await engines.right.instance.interruptGenerate();
+
+  engines.left.generating = false;
+  engines.right.generating = false;
+
+  toggleStopButton(false);
+  enableChat(true);
+  setStatus("Generation stopped.");
 };
 
 /* ---------------- Sliders ---------------- */
@@ -1042,7 +1163,6 @@ el("topP").oninput = () => (el("topPVal").textContent = el("topP").value);
 
 /* ---------------- Reset ---------------- */
 el("clearChatBtn").onclick = () => {
-  if (!modelLoaded) return;
   resetChat();
   setStatus("Chat reset.");
 };
@@ -1080,7 +1200,7 @@ document.addEventListener("keydown", (e) => {
 
   // Escape: Stop generation or close sidebar
   if (e.key === "Escape") {
-    if (isGenerating) {
+    if (engines.left.generating || engines.right.generating) {
       el("stopBtn").click();
     } else if (
       window.innerWidth <= 768 &&
@@ -1092,7 +1212,78 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-/* ---------------- Init ---------------- */
+/* ---------------- Init & Event Listeners ---------------- */
+
+// Compare Mode Toggle
+el("compareBtn").onclick = () => {
+  compareMode = !compareMode;
+  const btn = el("compareBtn");
+
+  if (compareMode) {
+    document.body.classList.add("compare-mode");
+    btn.classList.add("active");
+
+    el("selectorRight").classList.remove("hidden");
+    el("chatRight").classList.remove("hidden");
+    el("chatHeaderRightPane").classList.remove("hidden");
+    el("loadModelBtn").textContent = "Load Model A";
+  } else {
+    document.body.classList.remove("compare-mode");
+    btn.classList.remove("active");
+
+    el("selectorRight").classList.add("hidden");
+    el("chatRight").classList.add("hidden");
+    el("chatHeaderRightPane").classList.add("hidden");
+    el("loadModelBtn").textContent = "Load Model";
+  }
+};
+
+// About Modal
+el("aboutBtn").onclick = () => {
+  el("aboutModal").classList.add("active");
+};
+
+el("aboutCloseBtn").onclick = () => {
+  el("aboutModal").classList.remove("active");
+};
+
+// Close About on background click
+el("aboutModal").onclick = (e) => {
+  if (e.target === el("aboutModal")) {
+    el("aboutModal").classList.remove("active");
+  }
+};
+
+// Model Loaders
+el("loadModelBtn").onclick = () => {
+  const selected = el("modelSelect").value;
+  if (!selected) return;
+
+  if (cachedModels.has(selected)) {
+    loadModel(selected, "left"); // instant switch
+  } else {
+    downloadModelInBackground(selected);
+  }
+};
+
+el("loadModelBtnRight").onclick = () => {
+  const selected = el("modelSelectRight").value;
+  if (!selected) return;
+
+  if (cachedModels.has(selected)) {
+    loadModel(selected, "right"); // instant switch
+  } else {
+    downloadModelInBackground(selected);
+  }
+};
+
+// Search Listeners
+el("modelSearchRight").oninput = (e) => {
+  const query = e.target.value;
+  renderModelList("modelSelectRight", query);
+};
+
+
 populateModels();
 setupSidebar();
 setupSystemPrompt();

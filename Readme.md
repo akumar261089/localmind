@@ -1,180 +1,413 @@
 # 🧠 LocalMind
 
-**LocalMind** is a local-first AI interface that runs large language models directly in your browser using **WebGPU**.  
-It is designed to be **private**, **transparent**, and **user-controlled**, with no backend servers involved.
+### A Browser-Native AI Experimentation Platform
 
-LocalMind combines:
+LocalMind is a **technical AI experimentation platform** that runs modern Large Language Models (LLMs) directly inside the browser using WebGPU.
 
-- A lightweight single-page website (Home / About / Features)
-- Dedicated application pages for **Chat** and **AI-assisted Web Browsing**
+This is not a chatbot product.
+This is not a polished consumer assistant.
 
----
-
-## ✨ Key Principles
-
-- **Local-first** — models run on your device
-- **No backend** — no prompts or data are sent to servers
-- **Explicit context** — the AI only sees what you give it
-- **Browser-native** — respects browser security rules
-- **Simple architecture** — no unnecessary frameworks
-
----
-
-## 🧩 Project Structure
+This is a **local AI lab** designed to explore the evolution of:
 
 ```
-
-localmind/
-├── index.html
-├── chat.html
-├── browse.html
-├── css/
-│   └── localmind.css
-├── main.chat.js
-├── main.browse.js
-└── README.md
-
-
+LLM → Assistant → Agent → Agentic AI
 ```
 
----
-
-## 🌐 Pages Overview
-
-### 1️⃣ Home (`index.html`)
-
-A lightweight single-page site that explains:
-
-- What LocalMind is
-- Its philosophy and limitations
-- Links to launch the apps
-
-No models are loaded here.
+All fully client-side.
 
 ---
 
-### 2️⃣ Chat (`chat.html`)
+# 🎯 Project Intention
 
-A pure LLM chat interface:
+LocalMind exists to:
 
-- Load and switch local models
-- Quick model buttons
-- Editable system prompts
-- Model parameters (temperature, tokens)
-- Streaming responses via WebGPU
+1. Experiment with local LLM execution in the browser
+2. Understand system prompts and inference behavior
+3. Explore tool-augmented assistants
+4. Build agent loops
+5. Prototype early-stage agentic AI systems
+6. Observe token usage, memory injection, and reasoning transparency
+7. Study architectural patterns of modern AI systems
 
-This page is focused only on conversational AI.
-
----
-
-### 3️⃣ Browse (`browse.html`)
-
-An AI-assisted browsing interface:
-
-- Load any website in a browser frame
-- Explicitly send page content to the AI
-- Chat with the model _about_ the page
-- Same model controls as Chat mode
-
-⚠️ Due to browser security:
-
-- Pages are **not read automatically**
-- Only user-approved content is added to AI context
+This is an experiment.
+This is a sandbox.
+This is an AI systems playground.
 
 ---
 
-## 🔒 Privacy & Security
+# 🟢 Current State (As of Now)
 
-LocalMind:
+LocalMind currently supports:
 
-- Does **not** collect data
-- Does **not** send prompts to external servers
-- Does **not** bypass browser security (CORS, SOP)
-- Does **not** track users
+## ✅ 1. Pure LLM Mode (Chat)
 
-All computation happens locally using WebGPU.
+- WebGPU-powered local LLM execution
+- Model switching
+- Background model downloading
+- Cache storage tracking
+- Model deletion
+- Token usage visualization
+- Streaming responses
+- Temperature control
+- Top-P control
+- Max tokens configuration
+- Editable system prompt
+- Prompt presets
+- Context window tracking
+- Runtime speed stats
+- Local storage persistence
+- Responsive UI
+
+This mode acts as:
+
+> A local inference playground.
 
 ---
 
-## 🚀 Getting Started (Local Development)
+## ⚠️ 2. Browse Mode (Experimental / Legacy)
 
-### 1️⃣ Clone or download the project
+- URL loading in iframe
+- Proxy-based auto-fetch
+- Manual content injection
+- Simple system prompt
+- Model switching
 
-```bash
-git clone <repo-url>
-cd localmind
-```
+However:
 
-### 2️⃣ Start a local server
+- Many websites block iframe
+- Proxy reliability varies
+- Tool integration is limited
+- Architecture differs from Chat mode
 
-```bash
-python -m http.server
-```
+This mode is considered experimental and may be redesigned.
 
-### 3️⃣ Open in browser
+---
+
+# 🧠 Architectural Philosophy
+
+LocalMind is evolving into a layered capability system:
 
 ```
-http://localhost:8000
+Level 1 → LLM
+Level 2 → Assistant (Tools)
+Level 3 → Agent (Loop + Tools)
+Level 4 → Agentic (Planning + Memory + Reflection)
 ```
 
-> ⚠️ A local server is required.
-> Opening files directly (`file://`) will not work.
+Each level builds on the previous.
+
+The platform is designed to:
+
+- Expose internal mechanics
+- Show token usage
+- Reveal tool calls
+- Display reasoning steps
+- Avoid hiding system construction
+- Allow deep experimentation
 
 ---
 
-## 🧠 Supported Technology
+# 🚀 Planned Evolution
 
-- **WebGPU** (Chrome / Edge recommended)
-- **@mlc-ai/web-llm**
-- ES Modules
-- Vanilla HTML, CSS, JavaScript
+## 🟢 Level 1 – LLM Mode (Current Core)
 
----
+Focus: Pure inference experimentation
 
-## ⚠️ Known Limitations
+Planned improvements:
 
-- Exact token counts are estimated, not exact
-- Some websites block fetching due to CORS
-- Large pages are truncated for context safety
-- Performance depends on device GPU
-
-These are inherent browser and WebGPU constraints.
+- Prompt visualizer (final compiled prompt display)
+- Determinism testing (repeat prompt comparisons)
+- Side-by-side model comparison
+- Prompt templates library
+- JSON / structured output mode
+- Export / save conversations
 
 ---
 
-## 🛣️ Roadmap (Possible Next Steps)
+## 🔵 Level 2 – Assistant Mode
 
-- Reader-mode text extraction
-- Context size indicators
-- Replace vs append page context toggle
-- Page summary button
-- Shared core logic between Chat & Browse
-- Chrome extension for full page access
-- Agent workflows
+Focus: Tool-augmented intelligence
+
+Replace fragile iframe browsing with tool-based architecture:
+
+Planned tools:
+
+- 🔍 Web search (API-based)
+- 🌐 URL fetch (clean extraction)
+- 📄 PDF reader
+- 📂 Local file reader
+- 🧠 Memory store
+- 📊 Structured output parser
+
+UI additions:
+
+- Tool registry panel
+- Tool call log
+- Tool result injection viewer
+- Prompt assembly visualizer
+
+Assistant flow:
+
+```
+User → Model → Tool Call → Tool Result → Model → Final Answer
+```
+
+All visible.
 
 ---
 
-## 🧠 Philosophy
+## 🟣 Level 3 – Agent Mode
 
-LocalMind is an experiment in building AI tools that:
+Focus: Multi-step execution
 
-- Users can understand
-- Developers can inspect
-- Machines can run locally
+Add:
 
-No hype. No magic. Honest limitations.
+- Goal input field
+- Execution loop
+- Step counter
+- Reflection step
+- Structured reasoning log
+- Manual step control
+
+Example execution:
+
+```
+Goal: Summarize latest AI research
+Step 1: Search web
+Step 2: Fetch top result
+Step 3: Summarize
+Reflection: Not enough info
+Step 4: Refine search
+```
+
+User can:
+
+- Step once
+- Run multiple steps
+- Stop execution
 
 ---
 
-## 📄 License
+## 🔴 Level 4 – Agentic Mode
 
-This project is currently provided as-is for experimentation and learning.
-Choose a license (MIT / Apache-2.0) before public release.
+Focus: Autonomous experimentation
+
+Add:
+
+- Planning phase
+- Task decomposition tree
+- Memory object model
+- Iteration limit
+- Token budget
+- Self-reflection logic
+- Abort safeguards
+
+This becomes:
+
+> A safe local AutoGPT-style experimental environment.
 
 ---
 
-## 🙌 Acknowledgements
+# 🏗 Target Architecture
 
-- WebLLM by MLC-AI
-- WebGPU community
-- Open-source LLM ecosystem
+Move toward a unified architecture:
+
+```
+app.html
+app.js
+modelManager.js
+modeController.js
+toolManager.js
+agentRunner.js
+storageManager.js
+```
+
+Single engine instance.
+Single model lifecycle manager.
+Single UI shell.
+Modes switch internally.
+
+No fragmented multi-page logic.
+
+---
+
+# 🛠 Model Management Design
+
+Current capabilities:
+
+- Background downloads
+- Cache detection
+- Model deletion
+- Storage estimation
+- Runtime stats
+
+Future improvements:
+
+- Model size tracking
+- Concurrent download management
+- Download queue
+- Prefetch recommended models
+- Shared ModelManager across modes
+
+---
+
+# 🔬 Experimental Features Planned
+
+To make LocalMind a real AI lab:
+
+### 🧪 Prompt Visualizer
+
+Show the exact prompt sent to model.
+
+### 🧪 Token Flow Analyzer
+
+Break down:
+
+- Prompt tokens
+- Completion tokens
+- Tool tokens
+- Memory tokens
+
+### 🧪 Memory Inspector
+
+Display memory state object.
+
+### 🧪 Tool Call Inspector
+
+Show:
+
+- Tool name
+- Parameters
+- Raw output
+
+### 🧪 Determinism Lab
+
+Run same prompt multiple times and compare outputs.
+
+### 🧪 Model Comparison Mode
+
+Side-by-side response comparison.
+
+### 🧪 Agent Loop Debug Console
+
+Step-by-step execution visibility.
+
+---
+
+# 🧭 Design Principles
+
+1. Transparency over polish
+2. Architecture over UI cosmetics
+3. Inspectability over abstraction
+4. Safety over autonomy
+5. Experimental flexibility over stability
+6. No hidden magic
+
+---
+
+# 🔐 Privacy Model
+
+- 100% client-side execution
+- No server dependency
+- No data collection
+- Model files cached locally
+- Requires WebGPU-compatible browser
+
+---
+
+# 📌 Current Limitations
+
+- WebGPU browser support required
+- Memory constraints on low-end devices
+- Large models (>3B) not ideal for browser
+- Iframe browsing unreliable
+- Tool architecture not fully implemented yet
+
+---
+
+# 🎓 Intended Audience
+
+LocalMind is for:
+
+- AI engineers
+- LLM experimenters
+- Browser AI researchers
+- Agent system builders
+- Students learning LLM architecture
+- Developers exploring WebGPU
+
+Not for:
+
+- General consumers
+- Production AI deployment
+- Enterprise-grade workloads
+
+---
+
+# 🧠 Long-Term Vision
+
+LocalMind becomes:
+
+> A browser-native AI systems experimentation lab.
+
+A place where developers can:
+
+- Understand how LLMs behave
+- Build tool-augmented assistants
+- Prototype agents
+- Explore agentic loops
+- Analyze token economics
+- Test architectural patterns
+
+All locally.
+
+---
+
+# 📅 High-Level Roadmap
+
+Phase 1 – Stabilize LLM core
+Phase 2 – Implement Tool system
+Phase 3 – Add Agent loop
+Phase 4 – Add Planning + Memory
+Phase 5 – Refactor into unified app architecture
+
+---
+
+# ⚙️ Technology Stack
+
+- WebLLM (MLC-AI)
+- WebGPU
+- Vanilla JS
+- Browser Cache API
+- IndexedDB (if needed)
+- LocalStorage
+- Marked (Markdown rendering)
+- Highlight.js
+
+---
+
+# 🧪 Status Summary
+
+| Capability          | Status         |
+| ------------------- | -------------- |
+| Local LLM           | ✅ Stable      |
+| Model Manager       | ✅ Advanced    |
+| Background Download | ✅ Implemented |
+| Storage Tracking    | ✅ Implemented |
+| Tool System         | 🚧 Planned     |
+| Agent Loop          | 🚧 Planned     |
+| Agentic Mode        | 🚧 Concept     |
+| Unified App         | 🚧 Planned     |
+
+---
+
+# 📣 Final Note
+
+LocalMind is an experiment.
+
+It is not finished.
+It is not polished.
+It is evolving.
+
+The goal is not perfection.
+The goal is understanding.
