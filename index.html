@@ -28,6 +28,15 @@
             <strong>🧠LocalMind</strong>
         </a>
 
+        <!-- Mode Switcher -->
+        <div class="mode-switcher" style="display:flex; align-items:center; gap:8px; margin-left: 16px;">
+            <select id="modeSelect"
+                style="padding: 4px 8px; border-radius: 4px; background: var(--bg-panel); color: var(--text-main); border: 1px solid var(--border-light);">
+                <option value="chat">Level 1: LLM Mode</option>
+                <option value="assistant">Level 2: Assistant Mode</option>
+            </select>
+        </div>
+
 
         <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
             <!-- Social Links -->
@@ -135,6 +144,16 @@
             <input type="number" id="maxTokens" value="512">
 
             <button id="clearChatBtn" class="secondary">Reset Chat</button>
+
+            <!-- Tools Panel (Level 2) -->
+            <div id="toolsPanel" class="hidden">
+                <hr>
+                <h3>Available Tools</h3>
+                <div id="toolsList"
+                    style="font-size: 0.85rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px;">
+                    <!-- Tools injected by JS -->
+                </div>
+            </div>
 
         </aside>
 

@@ -3,6 +3,11 @@ import {
   prebuiltAppConfig,
 } from "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm";
 
+import { ToolRegistry } from "./js/agent/ToolRegistry.js";
+import { Assistant } from "./js/agent/Assistant.js";
+import { CalculatorTool } from "./js/agent/tools/CalculatorTool.js";
+import { TimeTool } from "./js/agent/tools/TimeTool.js";
+
 /* ---------------- State ---------------- */
 /* ---------------- State ---------------- */
 const engines = {
@@ -25,10 +30,17 @@ const engines = {
 };
 
 let compareMode = false;
+let currentMode = "chat"; // 'chat' | 'assistant'
 let renderTimer = null;
 let pendingContent = "";
 let cachedModels = new Set();
 let totalCacheSize = 0;
+
+// Assistant Setup
+const toolRegistry = new ToolRegistry();
+toolRegistry.register(new CalculatorTool());
+toolRegistry.register(new TimeTool());
+let assistant = null; // Initialized on loadModel
 
 /* ---------------- Debug ---------------- */
 const DEBUG_LLM = true;
@@ -586,7 +598,8 @@ async function detectCachedModels() {
         const keys = await cache.keys();
 
         // Try to match cache names to model IDs
-        allModels.forEach((model) => {
+        // Try to match cache names to model IDs
+        allModels.forEach((model) => { // Corrected 'ls.forEach' to 'allModels.forEach' based on context
           if (
             cacheName.includes(model.id) ||
             keys.some((req) => req.url.includes(model.id))
@@ -876,6 +889,13 @@ async function loadModel(modelId, slot = "left") {
     engineState.contextSize = parseInt(modelInfo.ctx) * 1024 || 4096;
   }
 
+  // Initialize Agent if in Assistant Mode (or just always for readiness)
+  // We pass the engine instance to the agent
+  if (slot === "left") {
+    assistant = new Assistant(engineState.instance, toolRegistry);
+    dbg("Assistant initialized with model", modelId);
+  }
+
   // Restore chat history + system prompt
   if (previousMessages.length > 0) {
     engineState.messages = previousMessages;
@@ -1115,8 +1135,15 @@ async function sendMessage() {
   };
 
   const promises = [];
-  if (engines.left.loaded) promises.push(runGeneration("left"));
-  if (compareMode && engines.right.loaded) promises.push(runGeneration("right"));
+
+  if (currentMode === "assistant" && engines.left.loaded) {
+    // Assistant Mode (Level 2) - only supports Left slot for now
+    promises.push(runAgentLoop("left", text));
+  } else {
+    // Chat Mode (Level 1)
+    if (engines.left.loaded) promises.push(runGeneration("left"));
+    if (compareMode && engines.right.loaded) promises.push(runGeneration("right"));
+  }
 
   await Promise.all(promises);
 
@@ -1125,6 +1152,80 @@ async function sendMessage() {
   el("userInput").focus();
   scrollToBottom("left");
   if (compareMode) scrollToBottom("right");
+}
+
+/* ---------------- Agent Loop Execution ---------------- */
+async function runAgentLoop(slot, userText) {
+  const engineState = engines[slot];
+  if (!engineState.loaded || !assistant) return;
+
+  engineState.generating = true;
+
+  // Add user message to history (UI already handled in sendMessage)
+  engineState.messages.push({ role: "user", content: userText });
+
+  const assistantDiv = document.createElement("div");
+  assistantDiv.className = "msg model";
+  assistantDiv.innerHTML = '<span class="loading-spinner"></span> Thinking...';
+
+  const targetId = slot === "right" ? "chatRight" : "chat";
+  el(targetId).appendChild(assistantDiv);
+  scrollToBottom(slot);
+
+  let finalReply = "";
+
+  try {
+    // Read the current system prompt from UI to ensure we use user edits
+    // The UI should already contain the full tool instructions if in Assistant Mode
+    const currentSystemPrompt = el("systemPrompt").value;
+
+    // Run the agent loop
+    const generator = assistant.run(
+      userText,
+      engineState.messages.slice(0, -1), // History excluding latest user msg
+      currentSystemPrompt, // Pass the explicit prompt
+      (thought) => {
+        // On Thought
+        const thoughtDiv = document.createElement("div");
+        thoughtDiv.className = "msg system"; // Use system style for thoughts?
+        thoughtDiv.style.fontSize = "0.85rem";
+        thoughtDiv.style.color = "var(--text-muted)";
+        thoughtDiv.style.fontStyle = "italic";
+        thoughtDiv.style.marginBottom = "4px";
+        thoughtDiv.textContent = `💭 ${thought}`;
+        el(targetId).insertBefore(thoughtDiv, assistantDiv);
+        scrollToBottom(slot);
+      },
+      (toolName, toolInput) => {
+        // On Action
+        const actionDiv = document.createElement("div");
+        actionDiv.className = "msg system";
+        actionDiv.style.fontSize = "0.85rem";
+        actionDiv.style.color = "var(--accent-primary)";
+        actionDiv.innerHTML = `🛠 <b>${toolName}</b> <span style="font-family:monospace">${toolInput}</span>`;
+        el(targetId).insertBefore(actionDiv, assistantDiv);
+        scrollToBottom(slot);
+      }
+    );
+
+    for await (const chunk of generator) {
+      // The generator yields final answer logic or intermediate tokens if we implemented streaming there
+      // Our Agent.js yields the final answer string at the end
+      finalReply = chunk;
+    }
+
+    assistantDiv.innerHTML = ""; // Clear spinner
+    renderMessageContent(assistantDiv, finalReply);
+
+    // Push final answer to history
+    engineState.messages.push({ role: "assistant", content: finalReply });
+
+  } catch (err) {
+    console.error("Assistant Error:", err);
+    assistantDiv.innerHTML += `<br><span style="color:red">Error: ${err.message}</span>`;
+  } finally {
+    engineState.generating = false;
+  }
 }
 
 
@@ -1283,10 +1384,73 @@ el("modelSearchRight").oninput = (e) => {
   renderModelList("modelSelectRight", query);
 };
 
+/* ---------------- Mode Switcher ---------------- */
+function setupModeSwitcher() {
+  const modeSelect = el("modeSelect");
+  const toolsPanel = el("toolsPanel");
+  const toolsList = el("toolsList");
+
+  if (!modeSelect || !toolsPanel) return;
+
+  function updateMode() {
+    currentMode = modeSelect.value;
+    document.body.setAttribute("data-mode", currentMode);
+
+    if (currentMode === "assistant") {
+      toolsPanel.classList.remove("hidden");
+      renderToolsList();
+
+      // Check if system prompt already has tool instructions
+      // If not, append them
+      const currentPrompt = el("systemPrompt").value;
+      if (!currentPrompt.includes("You have access to the following tools")) {
+        // Use static method so we can run this even if assistant instance (lazy loaded) isn't ready
+        const fullPrompt = Assistant.compileSystemPrompt(toolRegistry, currentPrompt);
+        el("systemPrompt").value = fullPrompt;
+        // Trigger save to local storage
+        el("systemPrompt").dispatchEvent(new Event('input'));
+      }
+    } else {
+      toolsPanel.classList.add("hidden");
+
+      // When switching back to Chat Mode, we should probably strip the tool instructions
+      // to keep the prompt clean for standard chat models.
+      let currentPrompt = el("systemPrompt").value;
+      if (currentPrompt.includes("You have access to the following tools")) {
+        // Naive strip: split by the tool intro and take the first part
+        // This assumes the tool instructions were appended at the end.
+        const basePrompt = currentPrompt.split("You have access to the following tools")[0].trim();
+        el("systemPrompt").value = basePrompt;
+        el("systemPrompt").dispatchEvent(new Event('input'));
+      }
+    }
+  }
+
+  function renderToolsList() {
+    if (!toolsList) return;
+    toolsList.innerHTML = "";
+    toolRegistry.list().forEach(tool => {
+      const div = document.createElement("div");
+      div.style.display = "flex";
+      div.style.alignItems = "center";
+      div.style.gap = "6px";
+      div.innerHTML = `
+                <span style="color:var(--accent-primary)">●</span>
+                <span>${tool.name}</span>
+            `;
+      div.title = tool.description;
+      toolsList.appendChild(div);
+    });
+  }
+
+  modeSelect.onchange = updateMode;
+  updateMode(); // Init
+}
 
 populateModels();
 setupSidebar();
 setupSystemPrompt();
+setupModeSwitcher();
 enableChat(false);
 
 if (typeof marked !== "undefined") {
